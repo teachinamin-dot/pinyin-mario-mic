@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>슈퍼 병음 마리오 · 성조 마이크 분석창</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:16px;background:#101b33;color:#f7f8fb;font:15px/1.5 system-ui,'Noto Sans KR',sans-serif}
+    .card{padding:16px;background:#202f4b;border:2px solid #f8d048;border-radius:14px;margin:0 auto 12px;max-width:560px}
+    h1{font-size:21px;margin:0 0 8px;color:#ffdf46}h2{font-size:16px;margin:8px 0}
+    button{background:#ffd53a;color:#121212;font-size:16px;font-weight:800;border:2px solid #161616;border-radius:8px;padding:11px 15px;cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}.sub{background:#304c66;color:white}.muted{font-size:12px;color:#d6e0f0}.status{background:#111e34;padding:9px;border-radius:8px;min-height:42px}
+    .row{display:flex;gap:8px;flex-wrap:wrap}.tag{display:inline-block;background:#294961;padding:3px 9px;border-radius:6px}
+    .big{font-size:28px;font-weight:800;color:#f7de70}#curve{background:#f5f7fb;width:100%;height:145px;border-radius:9px}
+    .small{color:#f6e9a9;font-size:13px}.report{font-family:ui-monospace,monospace;white-space:pre-wrap}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>🎙️ 슈퍼 병음 마리오 · 마이크 분석</h1>
+    <p class="muted">이 창을 열어 둔 상태에서 원래 게임 창의 문제를 보고 발음하세요. Pitchy 분석 자체는 기기에서 처리합니다. 2~7단계의 브라우저 문자 인식은 외부 음성인식 서비스를 이용할 수 있습니다.</p>
+    <div class="row"><button id="start">🎤 마이크 시작</button><button id="stop" class="sub" disabled>⏹ 마이크 종료</button></div>
+    <p class="status" id="status">게임과 연결 중입니다…</p>
+    <div class="row"><span class="tag" id="mode">엔진: 대기</span><span class="tag" id="stage">단계: 대기</span></div>
+  </div>
+  <div class="card">
+    <h2>음높이 곡선 (Pitchy)</h2>
+    <svg id="curve" viewBox="0 0 400 140" aria-label="음높이 변화 그래프">
+      <path d="M 25 115 L 380 115" stroke="#cbd5e1" stroke-width="1"/><path id="curvePath" d="" fill="none" stroke="#008a76" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="25" y="132" font-size="11" fill="#4b5563">발음 시작</text><text x="325" y="132" font-size="11" fill="#4b5563">발음 종료</text>
+    </svg>
+    <div class="row"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
+    <p class="small" id="detail">음높이 분석은 발음을 채점하는 확정적인 판정이 아니라 실험적 추정입니다.</p>
+    <p class="muted" id="classes"></p>
+  </div>
+  <div class="card">
+    <h2>사용 순서</h2>
+    <p class="muted">① [마이크 시작] → ② 브라우저의 마이크 권한 [허용] → ③ 게임 창에서 [GAME START] → ④ 또렷하게 한 음절씩 발음. 시끄러운 환경에서는 오인식이 발생할 수 있습니다.</p>
+    <p class="muted">2~7단계에서는 기존 방식과 호환하기 위해 브라우저의 중국어 음성 문자 인식으로 전환합니다. 성조 판정은 1단계에만 적용됩니다.</p>
+  </div>
+  <script type="module">
+    import { PitchDetector } from 'https://esm.sh/pitchy@4';
+
+    const params = new URLSearchParams(location.search);
+    const parentOrigin = params.get('parentOrigin') || '';
+    const session = params.get('session') || '';
+    const parentOk = (() => {try { return new URL(parentOrigin).origin === parentOrigin; } catch(e) { return false; }})();
+    const el = id => document.getElementById(id);
+    const setStatus = text => {el('status').textContent = text; send({type:'PINYIN_STATUS', message:text});};
+    const send = data => {
+      if (parentOk && window.opener) window.opener.postMessage({...data,session},parentOrigin);
+    };
+
+    let cfg = {mode:'pitchy',tmModelUrl:'',stage:0,active:false};
+    let audioContext=null,stream=null,analyser=null,detector=null,pitchBuffer=null,timer=null;
+    let speechRecognition=null, speechDesired=false;
+    let tmRecognizer=null,tmModelUrlLoaded='',tmVotes=[], tmLoadPromise=null;
+    let toneListenBusy=false,utteranceId=0,speechStart=0,lastLoud=0,frames=[];
+    let noisedFrames=0, lastFreq=0;
+    let configVersion=0;
+
+    function cleanModelUrl(url) {
+      const u=String(url||'').trim();
+      if (!/^https:\/\/teachablemachine\.withgoogle\.com\/models\/[^/]+\/?$/i.test(u)) return '';
+      return u.endsWith('/')?u:u+'/';
+    }
+    function labelToTone(label) {
+      const s=String(label||'').trim().toLowerCase();
+      if (/background|noise|unknown|silence|무음|소음|배경/.test(s)) return '';
+      // TM 클래스 명칭은 1성/2성/3성/4성, mā/má/mǎ/mà, 1/2/3/4 등을 사용하세요.
+      if (/^[1-4]$/.test(s)) return s;
+      const digit=s.match(/(?:^|[^\d])([1-4])\s*(?:성|tone|声)?(?:$|[^\d])/i);
+      if (digit) return digit[1];
+      const toneChars={'ā':'1','á':'2','ǎ':'3','à':'4','mā':'1','má':'2','mǎ':'3','mà':'4'};
+      return toneChars[s]||'';
+    }
+    async function stopTm() {
+      if (tmRecognizer && tmRecognizer.isListening()) {
+        try { await tmRecognizer.stopListening(); } catch(e){ console.warn(e); }
+      }
+      tmVotes=[];
+    }
+    async function startTm(version) {
+      if (!stream || !cfg.active || cfg.stage!==1 || cfg.mode==='pitchy') return;
+      const model=cleanModelUrl(cfg.tmModelUrl);
+      if (!model) {setStatus('TM 모델 URL이 없거나 올바르지 않습니다. 관리자 설정을 확인하세요.');return;}
+      try {
+        if (!window.speechCommands) throw new Error('TM 오디오 라이브러리 로드 실패');
+        if (tmRecognizer && tmModelUrlLoaded!==model) {await stopTm();tmRecognizer=null;tmLoadPromise=null;}
+        if (!tmRecognizer) {
+          setStatus('TM 모델을 불러오는 중…');
+          if (!tmLoadPromise) {
+            tmLoadPromise=(async()=>{
+              const r=window.speechCommands.create('BROWSER_FFT',undefined,model+'model.json',model+'metadata.json');
+              await r.ensureModelLoaded();
+              return r;
+            })();
+          }
+          const r=await tmLoadPromise;
+          tmRecognizer=r;tmModelUrlLoaded=model;
+          el('classes').textContent='TM 클래스: '+r.wordLabels().join(', ');
+        }
+        if (version!==configVersion || cfg.stage!==1 || !cfg.active || cfg.mode==='pitchy') return;
+        if (tmRecognizer.isListening()) return;
+        await tmRecognizer.listen(result => {
+          if (!speechStart || !cfg.active || cfg.stage!==1) return;
+          const labels=tmRecognizer.wordLabels();
+          const ranked=labels.map((label,i)=>({tone:labelToTone(label),score:result.scores[i]}))
+            .sort((a,b)=>b.score-a.score);
+          if (!ranked[0].tone) return;
+          if (ranked[0].score>=0.85 && ranked[0].score-(ranked[1]?.score||0)>=0.18) {
+            tmVotes.push({tone:ranked[0].tone,score:ranked[0].score,when:Date.now()});
+          }
+        },{includeSpectrogram:false,probabilityThreshold:0,invokeCallbackOnNoiseAndUnknown:true,overlapFactor:.75});
+        setStatus('TM 모델 준비 완료. 성조를 발음하세요.');
+      }catch(e){tmLoadPromise=null;setStatus('TM 연결 실패: '+e.message);console.error(e);}
+    }
+    function mostLikelyTmTone() {
+      const counts={};
+      for(const v of tmVotes) { if (!counts[v.tone]) counts[v.tone]={count:0,best:0}; counts[v.tone].count++;counts[v.tone].best=Math.max(counts[v.tone].best,v.score); }
+      const best=Object.entries(counts).sort((a,b)=>b[1].count-a[1].count||b[1].best-a[1].best)[0];
+      // 실시간 TM은 1초 창으로 추론합니다. 한 발음에서 콜백이 한 번만 오는
+      // 경우에는 매우 높은 점수(0.93 이상)일 때만 제한적으로 인정합니다.
+      // 2회 이상 일치하는 투표를 받으면 기본 기준(0.85/격차 0.18)을 적용합니다.
+      if (!best || (best[1].count<2 && best[1].best<0.93)) return '';
+      return best[0];
+    }
+    function median(vals) { const a=[...vals].sort((x,y)=>x-y);return a[Math.floor(a.length/2)]; }
+    function computePitchResult(points) {
+      if(points.length<7) return {tone:'',reason:'유효한 음높이 데이터 부족'};
+      const all=points.map(p=>p.f);
+      const base=median(all), semis=all.map(f=>12*Math.log2(f/base));
+      // 튀는 주파수값(옥타브 오류 등)을 제한합니다.
+      const clean=semis.filter((v,i)=>i===0||Math.abs(v-semis[i-1])<9);
+      if(clean.length<7) return {tone:'',reason:'음높이 신호 불안정'};
+      const values=clean.map((v,i,a)=>(a[Math.max(0,i-1)]+v+a[Math.min(a.length-1,i+1)])/3);
+      const n=values.length;
+      const head=median(values.slice(0,Math.max(2,Math.floor(n*.2))));
+      const tail=median(values.slice(-Math.max(2,Math.floor(n*.2))));
+      const trough=Math.min(...values), high=Math.max(...values), idx=values.indexOf(trough)/(n-1);
+      const dip=head-trough, rise=tail-trough, net=tail-head, range=high-trough;
+      let tone='';
+      // 전형적 독립발화 3성: 초반 하강→중간 최저점→뒤 상승
+      if(dip>=1.4 && rise>=1.5 && idx>=.22 && idx<=.8) tone='3';
+      else if(net>=2.2 && idx<.5 && tail>high-1.8) tone='2';
+      else if(net<=-2.5 && head>trough+1.8) tone='4';
+      else if(Math.abs(net)<=1.2 && range<=2.8) tone='1';
+      return {tone,reason:tone?`${tone}성 패턴 후보 (시작-끝 ${net.toFixed(1)}반음)`:'성조 패턴 불확실',values};
+    }
+    function drawCurve(result) {
+      const vals=result?.values||[];
+      if(!vals.length){el('curvePath').setAttribute('d','');return;}
+      const min=Math.min(...vals)-1,max=Math.max(...vals)+1,span=Math.max(3,max-min);
+      const d=vals.map((v,i)=>(i?'L':'M')+ (25+355*i/Math.max(1,vals.length-1)).toFixed(1)+' '+(112-92*(v-min)/span).toFixed(1)).join(' ');
+      el('curvePath').setAttribute('d',d);
+    }
+    function finishUtterance() {
+      if(!speechStart) return;
+      const ms=Date.now()-speechStart;
+      const collected=frames;
+      frames=[];speechStart=0;noisedFrames=0;
+      if(ms<280||collected.length<7){tmVotes=[];return;}
+      const result=computePitchResult(collected);
+      const tmTone=cfg.mode==='pitchy'?'':mostLikelyTmTone();
+      const pitchyTone=cfg.mode==='tm'?'':result.tone;
+      tmVotes=[];
+      el('pitchTone').textContent=pitchyTone?pitchyTone+'성':'불확실';
+      el('tmTone').textContent=tmTone?tmTone+'성':'불확실';
+      el('detail').textContent=result.reason;
+      drawCurve(result);
+      send({type:'PINYIN_RESULT',utteranceId:++utteranceId, pitchyTone,tmTone});
+    }
+    function audioTick() {
+      if(!analyser || !stream || !cfg.active || cfg.stage!==1) return;
+      analyser.getFloatTimeDomainData(pitchBuffer);
+      const rms=Math.sqrt(pitchBuffer.reduce((s,v)=>s+v*v,0)/pitchBuffer.length);
+      const loud=rms>0.017;
+      const now=Date.now();
+      if(loud){noisedFrames++;lastLoud=now;}else{noisedFrames=0;}
+      if(!speechStart && noisedFrames>=2){speechStart=now-50;frames=[];tmVotes=[];}
+      if(speechStart){
+        const [freq,clarity]=detector.findPitch(pitchBuffer,audioContext.sampleRate);
+        if(loud && clarity>=0.85 && freq>70 && freq<750 && Number.isFinite(freq)) {
+          frames.push({f:freq,ms:now-speechStart});
+        }
+        if((!loud && now-lastLoud>=320) || now-speechStart>=2300) finishUtterance();
+      }
+    }
+    function stopBrowserSpeech() {
+      speechDesired=false;
+      if(speechRecognition){try{speechRecognition.stop();}catch(e){}}
+    }
+    function startBrowserSpeech() {
+      if(!stream || !cfg.active || cfg.stage===1) return;
+      const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+      if(!SpeechRecognition){setStatus('이 브라우저는 문자 음성인식을 지원하지 않습니다(Chrome 권장).');return;}
+      if(!speechRecognition){
+        speechRecognition=new SpeechRecognition();
+        speechRecognition.lang='zh-CN';speechRecognition.continuous=true;speechRecognition.interimResults=false;
+        speechRecognition.onresult=e=>{
+          if(cfg.active && cfg.stage!==1){
+            const text=e.results[e.results.length-1][0].transcript.trim();
+            send({type:'PINYIN_TEXT',text});
+            setStatus('중국어 문자 인식: '+text);
+          }
+        };
+        speechRecognition.onerror=e=>{ if(['not-allowed','service-not-allowed'].includes(e.error)) speechDesired=false; setStatus('문자 인식: '+e.error);};
+        speechRecognition.onend=()=>{if(speechDesired && stream){try{speechRecognition.start();}catch(e){}}};
+      }
+      if(speechDesired)return;
+      speechDesired=true;
+      try{speechRecognition.start();setStatus('2~7단계 문자 인식 중 (zh-CN)');}catch(e){setStatus('문자 인식 시작 실패: '+e.message);}
+    }
+    async function applyConfig() {
+      const version=++configVersion;
+      el('mode').textContent='엔진: '+({tm:'TM',pitchy:'Pitchy',either:'TM 또는 Pitchy'}[cfg.mode]||'대기');
+      el('stage').textContent='단계: '+(cfg.active?cfg.stage:'대기');
+      if(!stream){return;}
+      if(cfg.active && cfg.stage===1){
+        stopBrowserSpeech();
+        if(cfg.mode==='pitchy'){await stopTm();setStatus('Pitchy 분석 중: 한 음절씩 발음해 주세요.');}
+        else await startTm(version);
+      } else {
+        await stopTm();
+        if(cfg.active && cfg.stage>1) startBrowserSpeech();
+        else {stopBrowserSpeech();setStatus('게임 대기 중입니다.');}
+      }
+    }
+    window.addEventListener('message',e=>{
+      if(!parentOk || e.origin!==parentOrigin || e.source!==window.opener)return;
+      const data=e.data;
+      if(!data||data.session!==session||data.type!=='PINYIN_CONFIG')return;
+      const valid=['tm','pitchy','either'];
+      cfg={mode:valid.includes(data.mode)?data.mode:'pitchy',tmModelUrl:String(data.tmModelUrl||''),
+        stage:Number(data.stage)||0,active:data.active===true};
+      applyConfig();
+    });
+    async function startMic() {
+      if(stream)return;
+      el('start').disabled=true;
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+        audioContext=new (window.AudioContext||window.webkitAudioContext)();
+        await audioContext.resume();
+        const source=audioContext.createMediaStreamSource(stream);
+        analyser=audioContext.createAnalyser();
+        analyser.fftSize=2048;
+        source.connect(analyser);
+        pitchBuffer=new Float32Array(analyser.fftSize);
+        detector=PitchDetector.forFloat32Array(pitchBuffer.length);
+        timer=setInterval(audioTick,55);
+        el('stop').disabled=false;
+        setStatus('마이크 연결 성공. 게임 창에서 시작하세요.');
+        send({type:'PINYIN_MIC_READY'});
+        applyConfig();
+      }catch(e){el('start').disabled=false;setStatus('마이크 실패: '+e.message);console.error(e);}
+    }
+    async function stopMic() {
+      clearInterval(timer);timer=null;
+      stopBrowserSpeech();await stopTm();
+      if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+      if(audioContext){await audioContext.close();audioContext=null;}
+      analyser=null;detector=null;pitchBuffer=null;speechStart=0;
+      el('start').disabled=false;el('stop').disabled=true;
+      setStatus('마이크 종료');
+      send({type:'PINYIN_MIC_STOP'});
+    }
+    el('start').addEventListener('click',startMic);
+    el('stop').addEventListener('click',stopMic);
+    window.addEventListener('beforeunload',()=>{if(stream)stream.getTracks().forEach(t=>t.stop());});
+    if(!parentOk||!session){setStatus('게임창과의 연결 정보가 없습니다. 반드시 게임 화면의 [분석창 열기]로 여세요.');}
+    else {send({type:'PINYIN_READY'}); const timerReady=setInterval(()=>{send({type:'PINYIN_READY'});if(cfg.stage||cfg.active)clearInterval(timerReady);},1100);}
+  </script>
+</body>
+</html>
