@@ -1,81 +1,57 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-build="5.6">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>슈퍼 병음 마리오 · 성조 마이크 분석창</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;padding:16px;background:#101b33;color:#f7f8fb;font:15px/1.5 system-ui,'Noto Sans KR',sans-serif}
-    .card{padding:16px;background:#202f4b;border:2px solid #f8d048;border-radius:14px;margin:0 auto 12px;max-width:560px}
-    h1{font-size:21px;margin:0 0 8px;color:#ffdf46}h2{font-size:16px;margin:8px 0}
-    button{background:#ffd53a;color:#121212;font-size:16px;font-weight:800;border:2px solid #161616;border-radius:8px;padding:11px 15px;cursor:pointer}
-    button:disabled{opacity:.6;cursor:not-allowed}.sub{background:#304c66;color:white}.muted{font-size:12px;color:#d6e0f0}.status{background:#111e34;padding:9px;border-radius:8px;min-height:42px}
-    .row{display:flex;gap:8px;flex-wrap:wrap}.tag{display:inline-block;background:#294961;padding:3px 9px;border-radius:6px}
-    .big{font-size:28px;font-weight:800;color:#f7de70}#curve{background:#f5f7fb;width:100%;height:220px;border-radius:9px} .curve-controls{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0 6px;align-items:center} .curve-control{display:flex;align-items:center;gap:7px;font-size:12px;color:#eff6ff} .curve-control input{width:110px;accent-color:#ffdb50} .curve-control select{background:#f5f7fb;color:#14233b;border:0;border-radius:6px;padding:5px;font:inherit} .curve-help{color:#f9e4a5;font-size:11px;line-height:1.5}
-    .calibration{padding:10px;margin:8px 0;border-radius:8px;background:#122541;border:1px solid #526e85}
-    .calibration button{font-size:12px;padding:7px 9px}
-    .calibration button:focus-visible{outline:3px solid #fff}
-    .cal-note{color:#f7df83;font-size:12px;margin-top:8px}
-    .small{color:#f6e9a9;font-size:13px}.report{font-family:ui-monospace,monospace;white-space:pre-wrap}
+    :root{color-scheme:light;--ink:#293e38;--muted:#647168;--green:#286354;--line:#cdd4c6;--cream:#f4efdf}
+    *{box-sizing:border-box}body{margin:0;padding:24px 16px;background:#dce4d9;color:var(--ink);font:14px/1.5 system-ui,'Noto Sans KR',sans-serif}
+    .card{max-width:680px;margin:0 auto 14px;padding:22px;background:var(--cream);border:1px solid #c1cbbc;border-radius:14px;box-shadow:0 3px 8px #283e3610}
+    .card:first-child{border-top:4px solid #b68a42}
+    .brand{font-size:10px;letter-spacing:.14em;font-weight:650;color:#7d6338;margin-bottom:6px}
+    h1{font-size:23px;line-height:1.25;font-weight:650;letter-spacing:-.025em;margin:0 0 8px}
+    h2{font-size:17px;line-height:1.3;font-weight:650;margin:0 0 14px}
+    p{margin:10px 0}.muted{color:var(--muted);font-size:13px;line-height:1.6}
+    button{font:600 14px/1.3 inherit;font-family:inherit;font-size:14px;font-weight:600;line-height:1.3;padding:10px 16px;background:var(--green);color:#f7f4e9;border:1px solid var(--green);border-radius:7px;cursor:pointer;min-height:40px}
+    button:hover{filter:brightness(.94)}button:disabled{opacity:.45;cursor:not-allowed}.sub{background:#e6e9dd;color:#3d5148;border-color:#b7c4b6}
+    button:focus-visible,summary:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #b48635;outline-offset:3px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}.status{padding:10px 12px;background:#e6ebdf;color:#3b5649;border-left:3px solid #73937a;border-radius:5px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;min-height:0}
+    .tag{display:inline-block;font-size:11px;font-weight:500;background:#e6e5d5;color:#5b6557;border-radius:4px;padding:4px 8px}
+    .tone-results{display:grid;grid-template-columns:1.45fr 1fr;border:1px solid #bfcdbb;border-radius:10px;overflow:hidden;margin:0 0 14px;background:#e3eadb}
+    .primary-result,.secondary-result{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;padding:14px 16px}
+    .secondary-result{background:#edecdf;border-left:1px solid #c9d1bf}
+    .result-label{font-size:13px;font-weight:600;color:#47634d}.result-caption{grid-column:1/-1;font-size:11px;color:#65715f}
+    .big{font-size:28px;font-weight:600;line-height:1.2;color:#24563f}.secondary-result .big{font-size:23px;color:#71654a}
+    .curve-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;margin:4px 0 12px}
+    .curve-control{display:flex;align-items:center;gap:8px;font-size:12px;color:#586451;font-weight:500}.curve-control strong{font-weight:500;color:#47634d}
+    .curve-control input{width:88px;accent-color:#6f8c59}.curve-control select{font:inherit;background:#eee9d9;color:#394b3a;border:1px solid #acb9a5;border-radius:5px;padding:5px}
+    #curve{display:block;width:100%;height:auto;aspect-ratio:400/220;border:1px solid #c6cebd;border-radius:8px;background:#eaeede}
+    #detail{font-size:13px;font-weight:500;line-height:1.55;padding:10px 12px;margin:10px 0 14px;background:#e5eadb;color:#34563b;border-radius:6px}
+    .optional{border-top:1px solid var(--line);padding:8px 0;margin:0}.optional summary{cursor:pointer;color:#53654e;font-size:12px;font-weight:500;padding:3px 0}.optional summary span{margin-left:5px;color:#7c806e;font-size:11px}
+    .optional p{font-size:12px;line-height:1.6;color:#626e5b;margin:8px 0}.calibration{padding:8px 0}.calibration button{font-size:12px;padding:7px 9px;min-height:34px}.cal-note{font-size:12px;color:#82673b;margin-top:10px}
+    .calibration>div:first-child{font-size:12px!important;font-weight:500!important}.step{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;background:#dce5cf;color:#526947;font-size:11px;margin:3px 7px 3px 0}
+    #classes:empty{display:none}
+    @media(max-width:450px){body{padding:12px 10px}.card{padding:16px;margin-bottom:12px}h1{font-size:21px}.primary-result,.secondary-result{padding:12px;gap:6px}.result-caption{font-size:10px}.big{font-size:25px}.curve-controls{gap:10px}.curve-control input{width:72px}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
-
-  <style id="mario-theme">
-    @import url('https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@500;700;900&display=swap');
-    body{background:#5c94fc;background-image:radial-gradient(ellipse at 12% 10%,#fff 0 36px,transparent 37px),radial-gradient(ellipse at 88% 35%,#fff 0 45px,transparent 46px);color:#17233b;padding:20px 14px 42px;font-family:'Noto Sans KR',sans-serif;min-height:100vh}
-    body:after{content:'';position:fixed;bottom:0;left:0;right:0;height:16px;background:#b84418;border-top:6px solid #00aa00;z-index:10}
-    .card{max-width:620px;background:#fff3cc;border:4px solid #111;border-radius:4px;box-shadow:5px 5px 0 #0008;padding:18px;margin-bottom:18px}
-    .card:first-child{border-top:12px solid #e52521}
-    h1{font-family:'Jua',sans-serif;font-size:25px;color:#bf241f;line-height:1.4}
-    h2{font-family:'Jua',sans-serif;color:#173d72;font-size:20px}
-    button{background:#fbd000;border:3px solid #111;border-radius:2px;box-shadow:inset -3px -3px #0004,inset 3px 3px #fff8,3px 3px #111;font-weight:900}
-    button:active{transform:translate(2px,2px);box-shadow:inset 2px 2px #0004,1px 1px #111}
-    button:focus-visible,select:focus-visible{outline:3px solid #049cd8;outline-offset:4px}
-    #start{background:#43b047;color:white}.sub{background:#049cd8;color:white}
-    .muted{color:#475569}.small{color:#273d60}.status{background:#fff;border:2px solid #233b57;color:#17233b;border-radius:3px}
-    .tag{background:#173d72;color:white;border:2px solid #111;border-radius:2px}
-    .big{color:#b42318;font-size:34px;font-weight:900}
-    .calibration{background:#fff9e8;border:2px solid #b58c2c;border-radius:3px}.cal-note{color:#704a00}
-    .curve-control{color:#173d72;font-weight:700}.curve-control select{border:2px solid #111}
-    .curve-help{color:#4b3a17;font-size:12px}#curve{border:2px solid #173d72;border-radius:3px;background:#f5f7fb}
-    .row{gap:12px}.curve-controls{gap:16px}
-    @media(max-width:420px){body{padding:10px 8px 30px}.card{padding:12px}h1{font-size:21px}.row button{font-size:14px}}
-  </style>
-<style id="readability-theme">
- body{background:#eaf2ff;background-image:none;color:#17233b;padding:20px 16px 32px;font-size:15px;line-height:1.7}
- body:after{display:none}
- .card{max-width:740px;background:white;border:2px solid #203956;border-radius:12px;box-shadow:0 4px 12px #173d7210;padding:22px;margin-bottom:16px}
- .card:first-child{border-top:7px solid #e52521}
- h1{font-size:25px;color:#173d72;line-height:1.4;margin-bottom:12px}
- h2{font-size:20px;line-height:1.5;color:#173d72;margin:0 0 14px}
- button{border-width:2px;border-radius:6px;box-shadow:0 3px 0 #17233b;font-size:15px;padding:10px 16px}
- #start{background:#187143}.sub{background:#195a91}
- .muted,.small,.curve-help,.cal-note{font-size:14px;line-height:1.75;color:#36475d}
- .status{background:#f2f6fb;border:1px solid #b9c9dc;padding:12px;border-radius:6px;font-size:14px;overflow-wrap:anywhere}
- .tag{font-size:12px;background:#eaf2ff;color:#173d72;border:1px solid #becfe4;padding:4px 10px;border-radius:5px}
- .tone-result{padding:14px 18px;background:#fff5cf;border:1px solid #dec267;border-radius:8px;align-items:center;gap:28px;margin-bottom:16px;font-weight:700}
- .big{font-size:38px;color:#173d72}.curve-controls{padding:10px 0;gap:16px}.curve-control{font-size:14px}
- #curve{height:auto;aspect-ratio:400/220;border:1px solid #b9c9dc;border-radius:8px}
- .optional{margin:12px 0;border-top:1px solid #dbe3ed;padding-top:10px}
- summary{font-size:14px;font-weight:700;color:#24486b;cursor:pointer;padding:5px 0}
- summary:focus-visible{outline:3px solid #049cd8;outline-offset:3px}
- .calibration{border:0;background:#f5f8fc;padding:12px}.calibration button{font-size:13px}
- #detail{font-size:15px;font-weight:500;color:#233b57;padding:10px 0}
- @media(max-width:420px){body{padding:10px 8px}.card{padding:14px}h1{font-size:21px}.tone-result{gap:16px;padding:10px}.big{font-size:32px}.curve-control input{width:85px}}
- </style>
 </head>
 <body>
   <div class="card">
-    <h1>🎙️ 슈퍼 병음 마리오 · 마이크 분석 v5.5</h1>
-    <p class="muted">이 창을 열어 둔 상태에서 원래 게임 창의 문제를 보고 발음하세요. Pitchy 분석 자체는 기기에서 처리합니다. 2~7단계의 브라우저 문자 인식은 외부 음성인식 서비스를 이용할 수 있습니다.</p>
+    <div class="brand">SUPER PINYIN MARIO</div>
+    <h1>마이크 분석</h1>
+    <p class="muted">마이크를 켜고, 게임에 나온 음절을 한 번씩 발음해 보세요.</p>
     <div class="row"><button id="start">🎤 마이크 시작</button><button id="stop" class="sub" disabled>⏹ 마이크 종료</button></div>
     <p class="status" id="status">게임과 연결 중입니다…</p>
     <div class="row"><span class="tag" id="mode">엔진: 대기</span><span class="tag" id="stage">단계: 대기</span></div>
   </div>
   <div class="card">
-    <h2>음높이 곡선 (Pitchy) · 시간축 / 5도 연습 판정 v5.5 (짧은 급하강 · 초반 반등 허용)</h2>
-    <div class="row tone-result"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
+    <h2>내 목소리의 높낮이</h2>
+    <div class="tone-results" aria-live="polite">
+      <div class="primary-result"><span class="result-label">Pitchy 판정</span><span class="big" id="pitchTone">—</span><span class="result-caption">음높이의 흐름을 비교합니다</span></div>
+      <div class="secondary-result"><span class="result-label">TM 판정</span><span class="big" id="tmTone">—</span><span class="result-caption">모델 연결 시 표시</span></div>
+    </div>
     <div class="curve-controls">
       <label class="curve-control" for="zoomRange">세로 확대 (미보정 시)
         <input id="zoomRange" type="range" min="1" max="4" step="0.5" value="2.5" />
@@ -93,8 +69,8 @@
       </label>
     </div>
     <svg id="curve" viewBox="0 0 400 220" aria-label="실제 시간과 5도 성조 높이 비교 그래프">
-      <rect x="30" y="18" width="345" height="164" fill="#fff" stroke="#d2d9e6" />
-      <g stroke="#e6eaf0" stroke-width="1">
+      <rect x="30" y="18" width="345" height="164" fill="#faf7ed" stroke="#d2d9e6" />
+      <g stroke="#dedfd4" stroke-width="1">
         <line x1="30" y1="18" x2="375" y2="18"/>
         <line x1="30" y1="59" x2="375" y2="59"/>
         <line x1="30" y1="100" x2="375" y2="100" stroke="#8aa0af" stroke-dasharray="4 4"/>
@@ -106,15 +82,20 @@
         <text x="23" y="22">5</text><text x="23" y="63">4</text><text x="23" y="104">3</text>
         <text x="23" y="145">2</text><text x="23" y="186">1</text>
       </g>
-      <path id="curvePath" d="" fill="none" stroke="#008a76" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path id="curvePath" d="" fill="none" stroke="#287365" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
       <text x="35" y="30" font-size="10" fill="#475569" id="axisDescription">상대 곡선(미보정)</text>
       <text x="30" y="201" font-size="11" fill="#475569">0초</text>
       <text id="axisHalf" x="202.5" y="201" text-anchor="middle" font-size="11" fill="#475569">0.25초</text>
       <text id="axisEnd" x="375" y="201" text-anchor="end" font-size="11" fill="#475569">0.5초</text>
       <text id="graphMeta" x="202.5" y="215" text-anchor="middle" font-size="10" fill="#475569">시간축 0.5초 · 상대 확대 2.5배</text>
     </svg>
-    <details class="optional"><summary>내 목소리 보정 · 선택 사항</summary>
-    <div class="calibration">
+    <p class="small" id="detail">발음을 마치면 가장 가까운 성조를 알려드려요.</p>
+    <details class="optional"><summary>그래프와 판정 읽는 법</summary>
+      <p>1성은 평평하게, 2성은 위로, 3성은 내려갔다가 위로, 4성은 아래로 움직입니다.</p>
+      <p>3성은 214형을 연습하되, 끝음이 시작 높이까지 돌아오지 않아도 하강 후 빠른 반등이 뚜렷하면 인정합니다. 작은 흔들림은 1성으로 처리합니다.</p>
+      <p>보정 전의 1~5 눈금은 상대적인 높낮이입니다. 성조 판정은 그래프 확대와 별도로 계산하며, 연습용 추정 결과입니다.</p>
+    </details>
+    <details class="optional"><summary>내 목소리 보정 <span>선택</span></summary>    <div class="calibration">
       <div style="font-size:13px;font-weight:800;margin-bottom:8px">5도 표기법(1~5) · 내 목소리 높낮이 보정 (선택)</div>
       <div class="row">
         <button class="sub" id="calLow" type="button">① 낮은 기준음 녹음</button>
@@ -125,17 +106,16 @@
       <div class="muted">마이크 시작 후 낮은 음(편안한 최저 음역)과 높은 음(편안한 최고 음역)을 각각 버튼을 누른 뒤 '아—'라고 0.6~1초 발음하고 멈추세요. 무리한 고음은 필요하지 않습니다.</div>
     </div>
     </details>
-    <details class="optional"><summary>성조 판정과 그래프 읽는 법</summary><p class="curve-help">5도 기준 곡선: 1성 55 / 2성 35 / <b>3성 214</b> / 4성 51. 보정 전의 1~5 눈금은 방향을 보여주는 <b>상대적 그림</b>이며 실제 성조 오도 수치가 아닙니다. 보정 후에는 한 화자의 저음~고음을 1~5에 대응시킵니다. 3성은 중간에 내려갔다가 <b>시작보다 높은 음에서 끝나는 214형</b>을 기본으로 하되 연습용 오차를 허용합니다. 성조 판정은 그래프 확대와 분리하여 계산합니다. <b>화자 보정 후에는 1~5 눈금을 유지하기 위해 세로 확대가 비활성화됩니다.</b></p></details>
 
-    <p class="small" id="detail">음높이 분석은 발음을 채점하는 확정적인 판정이 아니라 실험적 추정입니다.</p>
-    <details class="optional"><summary>마이크 수신 진단</summary><p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p></details>
-    <p class="muted">진단 모드: GAME START 전에도 그래프가 그려집니다. 다만 게임 점수 전송은 STAGE 1 진행 중에만 이루어집니다.</p>
+
+    <details class="optional"><summary>마이크 수신 상태</summary><p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p></details>
+
     <p class="muted" id="classes"></p>
   </div>
   <div class="card">
-    <h2>사용 순서</h2>
-    <p class="muted">① [마이크 시작] → ② 브라우저의 마이크 권한 [허용] → ③ 게임 창에서 [GAME START] → ④ 또렷하게 한 음절씩 발음. 시끄러운 환경에서는 오인식이 발생할 수 있습니다.</p>
-    <p class="muted">2~7단계에서는 기존 방식과 호환하기 위해 브라우저의 중국어 음성 문자 인식으로 전환합니다. 성조 판정은 1단계에만 적용됩니다.</p>
+    <h2>시작하기</h2>
+    <p class="muted"><span class="step">1</span> 마이크 시작 후 권한을 허용하세요.<br><span class="step">2</span> 게임 창에서 GAME START를 누르세요.<br><span class="step">3</span> 한 음절씩 발음하고 잠깐 멈추세요.</p>
+    <p class="muted">성조 판정은 1단계에 적용됩니다. 2~7단계의 문자 인식은 외부 음성인식 서비스를 사용할 수 있습니다.</p>
   </div>
   <script type="module">
     let PitchDetector = null; // 버튼 클릭 때 동적 로딩: 오류를 화면에 표시하기 위함
@@ -259,7 +239,21 @@
       // Keep natural level-tone drift and small end flicks in tone 1.
       // Thresholds are semitones, independent of graph zoom and duration.
       const levelRange=12*Math.log2(1.12), directionalChange=levelRange;
-      const clearThird=n>=3 && idx>=.15 && idx<=.9 && dip>=.9 && rise>=1.2 && net>=.35;
+      const traditionalThird=n>=3 && idx>=.15 && idx<=.9 && dip>=.9 && rise>=1.2 && net>=.35;
+      const riseMs=times[n-1]-times[low];
+      let descent=0,descentNoise=0,ascent=0,ascentNoise=0;
+      for(let i=1;i<n;i++){
+        const delta=values[i]-values[i-1];
+        if(i<=low){if(delta<0)descent-=delta;else descentNoise+=delta;}
+        else {if(delta>0)ascent+=delta;else ascentNoise-=delta;}
+      }
+      // A visible dip followed by a decisive rebound is accepted for practice,
+      // even if the ending has not yet returned above the starting pitch.
+      const reboundThird=n>=3 && idx>=.2 && idx<=.85 && dip>=.45 && rise>=.55 &&
+        range>=1.1 && rise>=dip*.4 && riseMs>0 && rise/(riseMs/1000)>=3 &&
+        times.every((t,i)=>i===0 || (t>times[i-1] && t-times[i-1]<=180)) &&
+        descent/(descent+descentNoise)>=.75 && ascent/(ascent+ascentNoise)>=.75;
+      const clearThird=traditionalThird || reboundThird;
       // Find a continuously sampled stable interval, not an arbitrary pair of
       // equal endpoints. Gaps over 120ms cannot count as sustained voicing.
       let stableMs=0;
@@ -313,9 +307,9 @@
         peakDrop/(fallMs/1000)>=2.5 &&
         fallTravel/(fallTravel+reboundTravel)>=.85 &&
         !sustainedLevel && !levelWithRelease && !clearThird;
-      if(shortFourth) tone='4';
-      else if(range<=levelRange || ((sustainedLevel || levelWithRelease) && !clearThird)) tone='1';
-      else if(clearThird) tone='3';
+      if(clearThird) tone='3';
+      else if(shortFourth) tone='4';
+      else if(range<=levelRange || sustainedLevel || levelWithRelease) tone='1';
       else {
         // Compare relative shapes on the actual time axis. Fit offset and positive
         // amplitude so speaker register and range do not determine the tone.
@@ -343,9 +337,9 @@
         }
       }
       const description={'1':'1성(55) — 평조에 가까운 패턴','2':'2성(35) — 상승 패턴',
-        '3':'3성(214) — 하강 후 시작보다 높게 상승','4':'4성(51) — 하강 패턴'};
+        '3':'3성 — 내려갔다가 뚜렷하게 상승','4':'4성(51) — 하강 패턴'};
       const changePercent=100*(Math.pow(2,range/12)-1);
-      const reason=description[tone]+(shortFourth?` · 급하강 ${peakDrop.toFixed(2)}반음 / ${Math.round(fallMs)}ms`:tone==='1' && levelWithRelease?' · 짧은 끝음 흔들림 허용':'')+` · 전체 변화 폭 ${changePercent.toFixed(1)}% · 안정음 ${(stableMs/1000).toFixed(2)}초 · 처음→끝 ${net>=0?'+':''}${net.toFixed(1)}반음 · 음높이 ${n}개 (v5.5 추정)`;
+      const reason=description[tone]+(shortFourth?' · 짧은 급하강 감지':tone==='1' && levelWithRelease?' · 끝음의 작은 흔들림 허용':'')+(tone==='3'?` · 하강 ${dip.toFixed(1)} / 반등 ${rise.toFixed(1)}반음`:'');
       return {tone,reason,values,times,hz:valid.map(p=>p.f)};
     }
     function isCalibrated(){
@@ -468,7 +462,7 @@
       tmVotes=[];
       el('pitchTone').textContent=result.tone?result.tone+'성':'신호 없음';
       el('tmTone').textContent=tmTone?tmTone+'성':'—';
-      el('detail').textContent=result.reason+calibratedToneFeedback(result)+(scoring?'':' (독립 테스트: 점수에는 반영되지 않음)');
+      el('detail').textContent=result.reason+calibratedToneFeedback(result)+(scoring?'':' · 게임 연결 전: 점수 전송 안 함');
       drawCurve(result);
       if(scoring && (pitchyTone || tmTone))send({type:'PINYIN_RESULT',utteranceId:++utteranceId,pitchyTone,tmTone});
     }
