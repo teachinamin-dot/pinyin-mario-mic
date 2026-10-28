@@ -42,6 +42,28 @@
     .row{gap:12px}.curve-controls{gap:16px}
     @media(max-width:420px){body{padding:10px 8px 30px}.card{padding:12px}h1{font-size:21px}.row button{font-size:14px}}
   </style>
+<style id="readability-theme">
+ body{background:#eaf2ff;background-image:none;color:#17233b;padding:20px 16px 32px;font-size:15px;line-height:1.7}
+ body:after{display:none}
+ .card{max-width:740px;background:white;border:2px solid #203956;border-radius:12px;box-shadow:0 4px 12px #173d7210;padding:22px;margin-bottom:16px}
+ .card:first-child{border-top:7px solid #e52521}
+ h1{font-size:25px;color:#173d72;line-height:1.4;margin-bottom:12px}
+ h2{font-size:20px;line-height:1.5;color:#173d72;margin:0 0 14px}
+ button{border-width:2px;border-radius:6px;box-shadow:0 3px 0 #17233b;font-size:15px;padding:10px 16px}
+ #start{background:#187143}.sub{background:#195a91}
+ .muted,.small,.curve-help,.cal-note{font-size:14px;line-height:1.75;color:#36475d}
+ .status{background:#f2f6fb;border:1px solid #b9c9dc;padding:12px;border-radius:6px;font-size:14px;overflow-wrap:anywhere}
+ .tag{font-size:12px;background:#eaf2ff;color:#173d72;border:1px solid #becfe4;padding:4px 10px;border-radius:5px}
+ .tone-result{padding:14px 18px;background:#fff5cf;border:1px solid #dec267;border-radius:8px;align-items:center;gap:28px;margin-bottom:16px;font-weight:700}
+ .big{font-size:38px;color:#173d72}.curve-controls{padding:10px 0;gap:16px}.curve-control{font-size:14px}
+ #curve{height:auto;aspect-ratio:400/220;border:1px solid #b9c9dc;border-radius:8px}
+ .optional{margin:12px 0;border-top:1px solid #dbe3ed;padding-top:10px}
+ summary{font-size:14px;font-weight:700;color:#24486b;cursor:pointer;padding:5px 0}
+ summary:focus-visible{outline:3px solid #049cd8;outline-offset:3px}
+ .calibration{border:0;background:#f5f8fc;padding:12px}.calibration button{font-size:13px}
+ #detail{font-size:15px;font-weight:500;color:#233b57;padding:10px 0}
+ @media(max-width:420px){body{padding:10px 8px}.card{padding:14px}h1{font-size:21px}.tone-result{gap:16px;padding:10px}.big{font-size:32px}.curve-control input{width:85px}}
+ </style>
 </head>
 <body>
   <div class="card">
@@ -53,6 +75,7 @@
   </div>
   <div class="card">
     <h2>음높이 곡선 (Pitchy) · 시간축 / 5도 연습 판정 v5.5 (짧은 급하강 · 초반 반등 허용)</h2>
+    <div class="row tone-result"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
     <div class="curve-controls">
       <label class="curve-control" for="zoomRange">세로 확대 (미보정 시)
         <input id="zoomRange" type="range" min="1" max="4" step="0.5" value="2.5" />
@@ -68,16 +91,6 @@
           <option value="1500">1.5초</option>
         </select>
       </label>
-    </div>
-    <div class="calibration">
-      <div style="font-size:13px;font-weight:800;margin-bottom:8px">5도 표기법(1~5) · 내 목소리 높낮이 보정 (선택)</div>
-      <div class="row">
-        <button class="sub" id="calLow" type="button">① 낮은 기준음 녹음</button>
-        <button class="sub" id="calHigh" type="button">② 높은 기준음 녹음</button>
-        <button class="sub" id="calReset" type="button">보정 초기화</button>
-      </div>
-      <div id="calStatus" class="cal-note">보정 전: 방향 비교용 상대 곡선입니다. 1~5 절대 위치는 화자별 보정 후에만 의미가 있습니다.</div>
-      <div class="muted">마이크 시작 후 낮은 음(편안한 최저 음역)과 높은 음(편안한 최고 음역)을 각각 버튼을 누른 뒤 '아—'라고 0.6~1초 발음하고 멈추세요. 무리한 고음은 필요하지 않습니다.</div>
     </div>
     <svg id="curve" viewBox="0 0 400 220" aria-label="실제 시간과 5도 성조 높이 비교 그래프">
       <rect x="30" y="18" width="345" height="164" fill="#fff" stroke="#d2d9e6" />
@@ -100,10 +113,22 @@
       <text id="axisEnd" x="375" y="201" text-anchor="end" font-size="11" fill="#475569">0.5초</text>
       <text id="graphMeta" x="202.5" y="215" text-anchor="middle" font-size="10" fill="#475569">시간축 0.5초 · 상대 확대 2.5배</text>
     </svg>
-    <p class="curve-help">5도 기준 곡선: 1성 55 / 2성 35 / <b>3성 214</b> / 4성 51. 보정 전의 1~5 눈금은 방향을 보여주는 <b>상대적 그림</b>이며 실제 성조 오도 수치가 아닙니다. 보정 후에는 한 화자의 저음~고음을 1~5에 대응시킵니다. 3성은 중간에 내려갔다가 <b>시작보다 높은 음에서 끝나는 214형</b>을 기본으로 하되 연습용 오차를 허용합니다. 성조 판정은 그래프 확대와 분리하여 계산합니다. <b>화자 보정 후에는 1~5 눈금을 유지하기 위해 세로 확대가 비활성화됩니다.</b></p>
-    <div class="row"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
+    <details class="optional"><summary>내 목소리 보정 · 선택 사항</summary>
+    <div class="calibration">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px">5도 표기법(1~5) · 내 목소리 높낮이 보정 (선택)</div>
+      <div class="row">
+        <button class="sub" id="calLow" type="button">① 낮은 기준음 녹음</button>
+        <button class="sub" id="calHigh" type="button">② 높은 기준음 녹음</button>
+        <button class="sub" id="calReset" type="button">보정 초기화</button>
+      </div>
+      <div id="calStatus" class="cal-note">보정 전: 방향 비교용 상대 곡선입니다. 1~5 절대 위치는 화자별 보정 후에만 의미가 있습니다.</div>
+      <div class="muted">마이크 시작 후 낮은 음(편안한 최저 음역)과 높은 음(편안한 최고 음역)을 각각 버튼을 누른 뒤 '아—'라고 0.6~1초 발음하고 멈추세요. 무리한 고음은 필요하지 않습니다.</div>
+    </div>
+    </details>
+    <details class="optional"><summary>성조 판정과 그래프 읽는 법</summary><p class="curve-help">5도 기준 곡선: 1성 55 / 2성 35 / <b>3성 214</b> / 4성 51. 보정 전의 1~5 눈금은 방향을 보여주는 <b>상대적 그림</b>이며 실제 성조 오도 수치가 아닙니다. 보정 후에는 한 화자의 저음~고음을 1~5에 대응시킵니다. 3성은 중간에 내려갔다가 <b>시작보다 높은 음에서 끝나는 214형</b>을 기본으로 하되 연습용 오차를 허용합니다. 성조 판정은 그래프 확대와 분리하여 계산합니다. <b>화자 보정 후에는 1~5 눈금을 유지하기 위해 세로 확대가 비활성화됩니다.</b></p></details>
+
     <p class="small" id="detail">음높이 분석은 발음을 채점하는 확정적인 판정이 아니라 실험적 추정입니다.</p>
-    <p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p>
+    <details class="optional"><summary>마이크 수신 진단</summary><p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p></details>
     <p class="muted">진단 모드: GAME START 전에도 그래프가 그려집니다. 다만 게임 점수 전송은 STAGE 1 진행 중에만 이루어집니다.</p>
     <p class="muted" id="classes"></p>
   </div>
