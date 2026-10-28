@@ -26,13 +26,15 @@
     <div class="row"><span class="tag" id="mode">엔진: 대기</span><span class="tag" id="stage">단계: 대기</span></div>
   </div>
   <div class="card">
-    <h2>음높이 곡선 (Pitchy)</h2>
+    <h2>음높이 곡선 (Pitchy) · 진단 개선판</h2>
     <svg id="curve" viewBox="0 0 400 140" aria-label="음높이 변화 그래프">
       <path d="M 25 115 L 380 115" stroke="#cbd5e1" stroke-width="1"/><path id="curvePath" d="" fill="none" stroke="#008a76" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
       <text x="25" y="132" font-size="11" fill="#4b5563">발음 시작</text><text x="325" y="132" font-size="11" fill="#4b5563">발음 종료</text>
     </svg>
     <div class="row"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
     <p class="small" id="detail">음높이 분석은 발음을 채점하는 확정적인 판정이 아니라 실험적 추정입니다.</p>
+    <p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p>
+    <p class="muted">진단 모드: GAME START 전에도 그래프가 그려집니다. 다만 게임 점수 전송은 STAGE 1 진행 중에만 이루어집니다.</p>
     <p class="muted" id="classes"></p>
   </div>
   <div class="card">
@@ -41,7 +43,7 @@
     <p class="muted">2~7단계에서는 기존 방식과 호환하기 위해 브라우저의 중국어 음성 문자 인식으로 전환합니다. 성조 판정은 1단계에만 적용됩니다.</p>
   </div>
   <script type="module">
-    import { PitchDetector } from 'https://esm.sh/pitchy@4';
+    let PitchDetector = null; // 버튼 클릭 때 동적 로딩: 오류를 화면에 표시하기 위함
 
     const params = new URLSearchParams(location.search);
     const parentOrigin = params.get('parentOrigin') || '';
@@ -58,7 +60,7 @@
     let speechRecognition=null, speechDesired=false;
     let tmRecognizer=null,tmModelUrlLoaded='',tmVotes=[], tmLoadPromise=null;
     let toneListenBusy=false,utteranceId=0,speechStart=0,lastLoud=0,frames=[];
-    let noisedFrames=0, lastFreq=0;
+    let noisedFrames=0, lastFreq=0, lastMicUi=0;
     let configVersion=0;
 
     function cleanModelUrl(url) {
@@ -156,36 +158,73 @@
       const d=vals.map((v,i)=>(i?'L':'M')+ (25+355*i/Math.max(1,vals.length-1)).toFixed(1)+' '+(112-92*(v-min)/span).toFixed(1)).join(' ');
       el('curvePath').setAttribute('d',d);
     }
+    function drawRawPitch(points) {
+      if(points.length < 2) return;
+      const pitch = points.map(p=>p.f);
+      const base = median(pitch);
+      if (!base || !Number.isFinite(base)) return;
+      const semitones = pitch.map(f => 12*Math.log2(f/base));
+      drawCurve({values:semitones});
+    }
     function finishUtterance() {
       if(!speechStart) return;
       const ms=Date.now()-speechStart;
       const collected=frames;
       frames=[];speechStart=0;noisedFrames=0;
-      if(ms<280||collected.length<7){tmVotes=[];return;}
+      // 점수 판단은 유효 데이터가 충분히 모인 경우에만 진행합니다.
+      // 불충분한 경우에도 원인을 표시하며 이전 그래프를 지우지 않습니다.
+      if(ms<280 || collected.length<7){
+        tmVotes=[];
+        el('detail').textContent=`분석 보류: ${ms}ms, 음높이 ${collected.length}개. 한 음절을 0.6~1초 발음 후 잠시 멈춰보세요.`;
+        drawRawPitch(collected);
+        return;
+      }
       const result=computePitchResult(collected);
-      const tmTone=cfg.mode==='pitchy'?'':mostLikelyTmTone();
-      const pitchyTone=cfg.mode==='tm'?'':result.tone;
+      const scoring = cfg.active && cfg.stage===1;
+      const tmTone=(scoring && cfg.mode!=='pitchy')?mostLikelyTmTone():'';
+      const pitchyTone=(scoring && cfg.mode==='tm')?'':result.tone;
       tmVotes=[];
-      el('pitchTone').textContent=pitchyTone?pitchyTone+'성':'불확실';
-      el('tmTone').textContent=tmTone?tmTone+'성':'불확실';
-      el('detail').textContent=result.reason;
+      el('pitchTone').textContent=result.tone?result.tone+'성':'불확실';
+      el('tmTone').textContent=tmTone?tmTone+'성':'—';
+      el('detail').textContent=result.reason + (scoring?'':' (독립 테스트: 점수에는 반영되지 않음)');
       drawCurve(result);
-      send({type:'PINYIN_RESULT',utteranceId:++utteranceId, pitchyTone,tmTone});
+      if(scoring) send({type:'PINYIN_RESULT',utteranceId:++utteranceId, pitchyTone,tmTone});
     }
     function audioTick() {
-      if(!analyser || !stream || !cfg.active || cfg.stage!==1) return;
-      analyser.getFloatTimeDomainData(pitchBuffer);
-      const rms=Math.sqrt(pitchBuffer.reduce((s,v)=>s+v*v,0)/pitchBuffer.length);
-      const loud=rms>0.017;
-      const now=Date.now();
-      if(loud){noisedFrames++;lastLoud=now;}else{noisedFrames=0;}
-      if(!speechStart && noisedFrames>=2){speechStart=now-50;frames=[];tmVotes=[];}
-      if(speechStart){
+      // 게임이 아직 시작되지 않은 경우에도 마이크와 그래프를 진단할 수 있습니다.
+      if(!analyser || !stream || !pitchBuffer || !detector) return;
+      try {
+        analyser.getFloatTimeDomainData(pitchBuffer);
+        let power=0;
+        for(let i=0;i<pitchBuffer.length;i++) power+=pitchBuffer[i]*pitchBuffer[i];
+        const rms=Math.sqrt(power/pitchBuffer.length);
+        const loud=rms>0.010;
+        const now=Date.now();
         const [freq,clarity]=detector.findPitch(pitchBuffer,audioContext.sampleRate);
-        if(loud && clarity>=0.85 && freq>70 && freq<750 && Number.isFinite(freq)) {
-          frames.push({f:freq,ms:now-speechStart});
+        const clearPitch=Number.isFinite(freq) && freq>=70 && freq<=750 && clarity>=0.75;
+        if(now-lastMicUi>240){
+          el('micTelemetry').textContent='마이크 입력 크기(RMS): '+rms.toFixed(4)+
+           ' | 음높이: '+(clearPitch?freq.toFixed(0)+'Hz':'감지 안 됨')+
+           ' | 명료도: '+(Number.isFinite(clarity)?clarity.toFixed(2):'—')+
+           ' | 수집: '+frames.length+'개';
+          lastMicUi=now;
         }
-        if((!loud && now-lastLoud>=320) || now-speechStart>=2300) finishUtterance();
+        // 2~7단계는 기존 문자 인식을 사용하고 있으므로 곡선 수집을 잠시 쉽니다.
+        if(cfg.active && cfg.stage!==1) return;
+        if(loud){noisedFrames++;lastLoud=now;}else{noisedFrames=0;}
+        if(!speechStart && noisedFrames>=2){speechStart=now-50;frames=[];tmVotes=[];}
+        if(speechStart){
+          if(loud && clearPitch){
+            frames.push({f:freq,ms:now-speechStart});
+            if(frames.length>=2) drawRawPitch(frames);
+          }
+          if((!loud && now-lastLoud>=320) || now-speechStart>=2300) finishUtterance();
+        }
+      } catch(err) {
+        clearInterval(timer);timer=null;
+        el('micTelemetry').textContent='오디오 분석 오류: '+err.message;
+        setStatus('Pitchy 실행 오류: '+err.message);
+        console.error(err);
       }
     }
     function stopBrowserSpeech() {
@@ -241,6 +280,13 @@
       if(stream)return;
       el('start').disabled=true;
       try{
+        setStatus('Pitchy 라이브러리 연결 중…');
+        if(!PitchDetector) {
+          const mod=await import('https://esm.sh/pitchy@4');
+          if(!mod.PitchDetector) throw new Error('Pitchy 모듈을 불러올 수 없습니다');
+          PitchDetector=mod.PitchDetector;
+        }
+        setStatus('마이크 권한 요청 중…');
         stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
         audioContext=new (window.AudioContext||window.webkitAudioContext)();
         await audioContext.resume();
@@ -252,7 +298,7 @@
         detector=PitchDetector.forFloat32Array(pitchBuffer.length);
         timer=setInterval(audioTick,55);
         el('stop').disabled=false;
-        setStatus('마이크 연결 성공. 게임 창에서 시작하세요.');
+        setStatus('마이크 연결 성공! GAME START 전에도 음높이 그래프를 시험할 수 있습니다.');
         send({type:'PINYIN_MIC_READY'});
         applyConfig();
       }catch(e){el('start').disabled=false;setStatus('마이크 실패: '+e.message);console.error(e);}
@@ -262,7 +308,8 @@
       stopBrowserSpeech();await stopTm();
       if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
       if(audioContext){await audioContext.close();audioContext=null;}
-      analyser=null;detector=null;pitchBuffer=null;speechStart=0;
+      analyser=null;detector=null;pitchBuffer=null;speechStart=0;frames=[];
+      el('micTelemetry').textContent='마이크 수신 진단: 마이크가 종료되었습니다.';
       el('start').disabled=false;el('stop').disabled=true;
       setStatus('마이크 종료');
       send({type:'PINYIN_MIC_STOP'});
@@ -270,7 +317,7 @@
     el('start').addEventListener('click',startMic);
     el('stop').addEventListener('click',stopMic);
     window.addEventListener('beforeunload',()=>{if(stream)stream.getTracks().forEach(t=>t.stop());});
-    if(!parentOk||!session){setStatus('게임창과의 연결 정보가 없습니다. 반드시 게임 화면의 [분석창 열기]로 여세요.');}
+    if(!parentOk||!session){setStatus('독립 진단 모드입니다. 그래프는 테스트 가능하지만 점수 전송은 게임의 [분석창 열기]로 접속해야 합니다.');}
     else {send({type:'PINYIN_READY'}); const timerReady=setInterval(()=>{send({type:'PINYIN_READY'});if(cfg.stage||cfg.active)clearInterval(timerReady);},1100);}
   </script>
 </body>
