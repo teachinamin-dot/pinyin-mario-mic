@@ -12,6 +12,10 @@
     button:disabled{opacity:.6;cursor:not-allowed}.sub{background:#304c66;color:white}.muted{font-size:12px;color:#d6e0f0}.status{background:#111e34;padding:9px;border-radius:8px;min-height:42px}
     .row{display:flex;gap:8px;flex-wrap:wrap}.tag{display:inline-block;background:#294961;padding:3px 9px;border-radius:6px}
     .big{font-size:28px;font-weight:800;color:#f7de70}#curve{background:#f5f7fb;width:100%;height:220px;border-radius:9px} .curve-controls{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0 6px;align-items:center} .curve-control{display:flex;align-items:center;gap:7px;font-size:12px;color:#eff6ff} .curve-control input{width:110px;accent-color:#ffdb50} .curve-control select{background:#f5f7fb;color:#14233b;border:0;border-radius:6px;padding:5px;font:inherit} .curve-help{color:#f9e4a5;font-size:11px;line-height:1.5}
+    .calibration{padding:10px;margin:8px 0;border-radius:8px;background:#122541;border:1px solid #526e85}
+    .calibration button{font-size:12px;padding:7px 9px}
+    .calibration button:focus-visible{outline:3px solid #fff}
+    .cal-note{color:#f7df83;font-size:12px;margin-top:8px}
     .small{color:#f6e9a9;font-size:13px}.report{font-family:ui-monospace,monospace;white-space:pre-wrap}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
@@ -26,9 +30,9 @@
     <div class="row"><span class="tag" id="mode">엔진: 대기</span><span class="tag" id="stage">단계: 대기</span></div>
   </div>
   <div class="card">
-    <h2>음높이 곡선 (Pitchy) · 실제 시간축 / 확대 보기</h2>
+    <h2>음높이 곡선 (Pitchy) · 시간축 / 5도 연습 판정 v4.1 (점검판)</h2>
     <div class="curve-controls">
-      <label class="curve-control" for="zoomRange">세로 확대
+      <label class="curve-control" for="zoomRange">세로 확대 (미보정 시)
         <input id="zoomRange" type="range" min="1" max="4" step="0.5" value="2.5" />
         <strong id="zoomValue">2.5배</strong>
       </label>
@@ -41,22 +45,38 @@
         </select>
       </label>
     </div>
-    <svg id="curve" viewBox="0 0 400 220" aria-label="실제 발음 시간에 따른 상대 음높이 곡선">
+    <div class="calibration">
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px">5도 표기법(1~5) · 내 목소리 높낮이 보정 (선택)</div>
+      <div class="row">
+        <button class="sub" id="calLow" type="button">① 낮은 기준음 녹음</button>
+        <button class="sub" id="calHigh" type="button">② 높은 기준음 녹음</button>
+        <button class="sub" id="calReset" type="button">보정 초기화</button>
+      </div>
+      <div id="calStatus" class="cal-note">보정 전: 방향 비교용 상대 곡선입니다. 1~5 절대 위치는 화자별 보정 후에만 의미가 있습니다.</div>
+      <div class="muted">마이크 시작 후 낮은 음(편안한 최저 음역)과 높은 음(편안한 최고 음역)을 각각 버튼을 누른 뒤 '아—'라고 0.6~1초 발음하고 멈추세요. 무리한 고음은 필요하지 않습니다.</div>
+    </div>
+    <svg id="curve" viewBox="0 0 400 220" aria-label="실제 시간과 5도 성조 높이 비교 그래프">
       <rect x="30" y="18" width="345" height="164" fill="#fff" stroke="#d2d9e6" />
       <g stroke="#e6eaf0" stroke-width="1">
-        <line x1="30" y1="60" x2="375" y2="60"/>
+        <line x1="30" y1="18" x2="375" y2="18"/>
+        <line x1="30" y1="59" x2="375" y2="59"/>
         <line x1="30" y1="100" x2="375" y2="100" stroke="#8aa0af" stroke-dasharray="4 4"/>
-        <line x1="30" y1="140" x2="375" y2="140"/>
+        <line x1="30" y1="141" x2="375" y2="141"/>
+        <line x1="30" y1="182" x2="375" y2="182"/>
         <line x1="202.5" y1="18" x2="202.5" y2="182" stroke-dasharray="3 5"/>
       </g>
+      <g fill="#475569" font-size="11" text-anchor="end">
+        <text x="23" y="22">5</text><text x="23" y="63">4</text><text x="23" y="104">3</text>
+        <text x="23" y="145">2</text><text x="23" y="186">1</text>
+      </g>
       <path id="curvePath" d="" fill="none" stroke="#008a76" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="34" y="30" font-size="10" fill="#475569">상대 음높이 (반음)</text>
+      <text x="35" y="30" font-size="10" fill="#475569" id="axisDescription">상대 곡선(미보정)</text>
       <text x="30" y="201" font-size="11" fill="#475569">0초</text>
       <text id="axisHalf" x="202.5" y="201" text-anchor="middle" font-size="11" fill="#475569">0.75초</text>
       <text id="axisEnd" x="375" y="201" text-anchor="end" font-size="11" fill="#475569">1.5초</text>
-      <text id="graphMeta" x="202.5" y="215" text-anchor="middle" font-size="10" fill="#475569">시간축 1.5초 · 세로 확대 2.5배</text>
+      <text id="graphMeta" x="202.5" y="215" text-anchor="middle" font-size="10" fill="#475569">시간축 1.5초 · 상대 확대 2.5배</text>
     </svg>
-    <p class="curve-help">그래프는 실제 발음 시간에 맞춰 그려집니다. 세로 확대는 <b>화면 표시만</b> 바꾸며 성조 판정이나 점수에는 영향을 주지 않습니다. 큰 변화가 잘리지 않도록 자동으로 화면 안에 맞춥니다.</p>
+    <p class="curve-help">5도 기준 곡선: 1성 55 / 2성 35 / <b>3성 214</b> / 4성 51. 보정 전의 1~5 눈금은 방향을 보여주는 <b>상대적 그림</b>이며 실제 성조 오도 수치가 아닙니다. 보정 후에는 한 화자의 저음~고음을 1~5에 대응시킵니다. 3성은 중간에 내려갔다가 <b>시작보다 높은 음에서 끝나는 214형</b>을 기본으로 하되 연습용 오차를 허용합니다. 성조 판정은 그래프 확대와 분리하여 계산합니다. <b>화자 보정 후에는 1~5 눈금을 유지하기 위해 세로 확대가 비활성화됩니다.</b></p>
     <div class="row"><div>Pitchy: <span class="big" id="pitchTone">—</span></div><div>TM: <span class="big" id="tmTone">—</span></div></div>
     <p class="small" id="detail">음높이 분석은 발음을 채점하는 확정적인 판정이 아니라 실험적 추정입니다.</p>
     <p class="status" id="micTelemetry" aria-live="polite">마이크 수신 진단: 아직 마이크를 켜지 않았습니다.</p>
@@ -89,6 +109,8 @@
     let noisedFrames=0, lastFreq=0, lastMicUi=0;
     let configVersion=0;
     let graphZoom=2.5, graphWindowMs=1500, latestGraph=null;
+    let calibration={low:null,high:null},calibrationPending='';
+    let drawingUtterance=false;
 
     function cleanModelUrl(url) {
       const u=String(url||'').trim();
@@ -157,55 +179,138 @@
       return best[0];
     }
     function median(vals) { const a=[...vals].sort((x,y)=>x-y);return a[Math.floor(a.length/2)]; }
+    function averageSlope(vals) {
+      // 시계열의 전체 상승/하강 경향. 잡음 한두 프레임에 지나치게 흔들리지 않도록 함.
+      const n=vals.length;
+      if(n<3)return 0;
+      const mx=(n-1)/2, my=vals.reduce((a,b)=>a+b,0)/n;
+      let num=0,den=0;
+      for(let i=0;i<n;i++){num+=(i-mx)*(vals[i]-my);den+=(i-mx)**2;}
+      return den?num/den:0;
+    }
+    // 성조 교육용 '관대한' 분류기 (독립 발음 mā/má/mǎ/mà 전용).
+    // 5도 표기법 55/35/214/51은 F0의 상대적인 '모양'을 뜻합니다.
+    // 학생마다 음역이 다르므로 절대 Hz값이나 214와의 숫자상 일치를 요구하지 않습니다.
+    // 특히 3성은 끝부분이 시작부분보다 약간이라도 높아지고,
+    // 중간의 하강과 뒤 상승이 모두 나타나야 214형으로 인정합니다.
     function computePitchResult(points) {
-      if(points.length<7) return {tone:'',reason:'유효한 음높이 데이터 부족'};
-      const all=points.map(p=>p.f);
-      const base=median(all), semis=all.map(f=>12*Math.log2(f/base));
-      // 튀는 주파수값(옥타브 오류 등)을 제한합니다.
-      const kept=semis.map((v,i)=>({v, ms:points[i].ms}))
-        .filter((p,i)=>i===0||Math.abs(p.v-semis[i-1])<9);
-      const clean=kept.map(p=>p.v);
-      if(clean.length<7) return {tone:'',reason:'음높이 신호 불안정'};
-      const values=clean.map((v,i,a)=>(a[Math.max(0,i-1)]+v+a[Math.min(a.length-1,i+1)])/3);
+      if (points.length < 7) return {tone:'',reason:'유효한 음높이 데이터 부족'};
+      const valid=points.filter(p=>Number.isFinite(p.f) && p.f>0 && Number.isFinite(p.ms));
+      if(valid.length < 7) return {tone:'',reason:'유효한 음높이 데이터 부족'};
+      const base=median(valid.map(p=>p.f));
+      const raw=valid.map(p=>12*Math.log2(p.f/base));
+      // 명백한 옥타브 튐을 제거하고, 세 프레임 중앙값으로 노이즈 완화.
+      // 무리하게 평활화해 실제 3성의 저점을 지우지 않도록 짧은 창 사용.
+      const kept=valid.map((p,i)=>({v:raw[i],ms:p.ms}))
+        .filter((p,i)=>i===0 || Math.abs(p.v-raw[i-1]) < 7);
+      if (kept.length < 7) return {tone:'',reason:'음높이 신호 불안정'};
+      const arr=kept.map(p=>p.v);
+      const values=arr.map((v,i,a)=>median(a.slice(Math.max(0,i-1),Math.min(a.length,i+2))));
       const times=kept.map(p=>p.ms);
       const n=values.length;
-      const head=median(values.slice(0,Math.max(2,Math.floor(n*.2))));
-      const tail=median(values.slice(-Math.max(2,Math.floor(n*.2))));
-      const trough=Math.min(...values), high=Math.max(...values), idx=values.indexOf(trough)/(n-1);
-      const dip=head-trough, rise=tail-trough, net=tail-head, range=high-trough;
+      const edge=Math.max(2,Math.floor(n*0.20));
+      const head=median(values.slice(0,edge));
+      const tail=median(values.slice(-edge));
+      // 시작/끝의 한두 개 불안정 프레임 때문에 최저점 시점이 왜곡되지 않게 함.
+      const lowStart=Math.min(n-2, Math.max(1,Math.floor(n*0.10)));
+      const lowEnd=Math.max(lowStart+1,n-Math.max(1,Math.floor(n*0.10)));
+      let iMin=lowStart;
+      for(let i=lowStart+1;i<lowEnd;i++) if(values[i] < values[iMin]) iMin=i;
+      const trough=values[iMin], high=Math.max(...values);
+      const idx=iMin/(n-1);
+      const dip=head-trough, rise=tail-trough, net=tail-head;
+      const range=high-Math.min(...values);
+      const slope=averageSlope(values);
+      const firstSlope=averageSlope(values.slice(0,Math.max(4,Math.ceil(n*.40))));
+      const lastSlope=averageSlope(values.slice(Math.floor(n*.60)));
+      // 단계별로 큰 방향을 우선 판단하되, 학생 연습용으로 완만한 변화도 허용.
+      // 4성(51): 전체적으로 내려가면 끝의 작은 반등은 허용.
+      const fourth=net<=-1.2 && slope<0 && dip>=1.35;
+      // 3성(214): 2 -> 1 -> 4. 시작보다 끝이 조금 높고 중간 저점이 존재.
+      // 212처럼 끝이 시작 이하인 곡선은 의도적으로 3성 확정에서 제외.
+      const third=dip>=0.85 && rise>=1.45 && net>=0.38 &&
+        idx>=0.23 && idx<=0.79 && firstSlope<0.04 && lastSlope>0.045;
+      // 2성(35): 이른 저점/약한 초반 하강은 허용. 뚜렷한 중간 저점은 3성 우선.
+      const second=net>=0.95 && rise>=1.05 && slope>0 &&
+        (idx<=0.34 || dip<1.0 || (idx<0.49 && dip<1.5));
+      // 1성(55): 약한 음높이 흔들림은 허용하되, 뚜렷한 굴곡을 1성으로 오판하지 않음.
+      const unresolvedDip=dip>=0.85 && rise>=0.85;
+      const first=Math.abs(net)<=0.85 && range<=1.60 &&
+        Math.abs(slope)<=0.105 && !unresolvedDip;
       let tone='';
-      // 전형적 독립발화 3성: 초반 하강→중간 최저점→뒤 상승
-      if(dip>=1.4 && rise>=1.5 && idx>=.22 && idx<=.8) tone='3';
-      else if(net>=2.2 && idx<.5 && tail>high-1.8) tone='2';
-      else if(net<=-2.5 && head>trough+1.8) tone='4';
-      else if(Math.abs(net)<=1.2 && range<=2.8) tone='1';
-      return {tone,reason:tone?`${tone}성 패턴 후보 (시작-끝 ${net.toFixed(1)}반음)`:'성조 패턴 불확실',values,times};
+      if(fourth) tone='4';
+      else if(third) tone='3';
+      else if(second) tone='2';
+      else if(first) tone='1';
+      const description={
+        '1':'1성(55) — 대체로 일정한 높은 평조 패턴',
+        '2':'2성(35) — 자연스러운 상승 패턴',
+        '3':'3성(214) — 낮게 내려갔다가 시작보다 높게 상승',
+        '4':'4성(51) — 뚜렷한 하강 패턴'
+      };
+      const evidence=`처음→끝 ${net>=0?'+':''}${net.toFixed(1)}반음 · 중간 하강 ${Math.max(0,dip).toFixed(1)} · 재상승 ${Math.max(0,rise).toFixed(1)} · 저점 ${(idx*100).toFixed(0)}%`;
+      const reason=(tone?description[tone]:'판정 보류 — 성조 방향이 충분히 뚜렷하지 않아요. 다시 발음해 보세요.')+' · '+evidence;
+      return {tone,reason,values,times,hz:values.map(v=>base*Math.pow(2,v/12))};
     }
-    // 그래프 전용: 실제 발음 시간(ms)을 고정 눈금에 표시하고, 높낮이만 확대합니다.
-    // 음높이 인식값이나 1~4성 판정 조건은 수정하지 않습니다.
+    function isCalibrated(){
+      return calibration.low>0 && calibration.high>calibration.low*1.2;
+    }
+    function updateCalibrationStatus(message) {
+      const calibrated=isCalibrated();
+      // 보정 후에도 확대가 작동하는 것처럼 보여주는 UI 오류 방지:
+      // 5도 눈금의 실제 위치를 보존하려면 세로 배율은 고정해야 합니다.
+      el('zoomRange').disabled=calibrated;
+      el('zoomValue').textContent=calibrated?'5도 고정':graphZoom.toFixed(1)+'배';
+      el('calStatus').textContent=message || (calibrated
+        ? `보정됨: 낮은 음 ${Math.round(calibration.low)}Hz (1) / 높은 음 ${Math.round(calibration.high)}Hz (5). 같은 화자 기준 추정 음역입니다.`
+        : `보정 전: 화자별 1~5 위치는 알 수 없습니다. ${calibration.low?'낮은 음 저장됨. ':''}${calibration.high?'높은 음 저장됨. ':''}두 기준을 모두 녹음해 주세요.`);
+    }
+    function calibratedToneFeedback(result) {
+      // 이것은 학습 피드백일 뿐 채점 임계값이 아닙니다.
+      // 정확한 5도 표기 수치로 강제 채점하면 학습자 발음의 허용 오차를 좁힐 수 있습니다.
+      if(!isCalibrated() || !result.hz?.length) return '';
+      const lo=Math.log2(calibration.low),hi=Math.log2(calibration.high);
+      const level=hz=>Math.max(1,Math.min(5,1+4*(Math.log2(hz)-lo)/(hi-lo)));
+      const len=Math.max(2,Math.floor(result.hz.length*.20));
+      const start=level(median(result.hz.slice(0,len)));
+      const middle=level(Math.min(...result.hz));
+      const end=level(median(result.hz.slice(-len)));
+      const hint=(result.tone==='1' && (start+end)/2<2.2)
+        ? ' · 평평하지만 높은 1성(55)에 비해 음역이 낮아요. 조금 높여 연습해 보세요.' : '';
+      return ` · 보정 5도(처음/저점/끝) ${start.toFixed(1)}/${middle.toFixed(1)}/${end.toFixed(1)} (참고용)`+hint;
+    }
     function drawCurve(result) {
       const vals=result?.values||[];
       const times=result?.times||[];
       latestGraph=result;
       if(!vals.length){el('curvePath').setAttribute('d','');return;}
       const endMs=Math.max(0,...times);
-      // 긴 발음은 끝부분이 잘리지 않도록 시간축 자동 확장.
       const axisMs=Math.max(graphWindowMs,Math.ceil((endMs+50)/250)*250);
-      const baseline=median(vals);
-      const maxDeviation=Math.max(0.01,...vals.map(v=>Math.abs(v-baseline)));
-      // 1배: 22px/반음, 기본 2.5배: 55px/반음.
-      // 큰 변화는 164px 화면 밖으로 잘리지 않도록 상한을 둡니다.
-      const pixelsPerSemitone=Math.min(22*graphZoom, 73/maxDeviation);
+      const calibrated=isCalibrated();
+      const middle=median(vals);
+      const lows=[...vals].sort((a,b)=>a-b),vMin=lows[Math.floor(lows.length*.07)],vMax=lows[Math.floor(lows.length*.93)];
+      const center=(vMin+vMax)/2;
+      const visualScale=Math.min(0.52*graphZoom,3.4/Math.max(0.2,vMax-vMin));
       const d=vals.map((v,i)=>{
         const ms=Number.isFinite(times[i])?times[i]:i*endMs/Math.max(1,vals.length-1);
         const x=30+345*Math.min(ms,axisMs)/axisMs;
-        const y=100-(v-baseline)*pixelsPerSemitone;
+        let level;
+        if(calibrated && result.hz?.[i]){
+          // 로그 F0 구간을 화자의 편한 최저~최고 음역에 대응 (Chao 1~5 근사).
+          const logLow=Math.log2(calibration.low),logHigh=Math.log2(calibration.high);
+          level=1+4*(Math.log2(result.hz[i])-logLow)/(logHigh-logLow);
+        } else {
+          // 화자 보정 전: 상대적인 방향만 표시. 오도 값이라고 주장하지 않음.
+          level=3+(v-center)*visualScale;
+        }
+        const y=18+(5-Math.max(1,Math.min(5,level)))*41;
         return (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
       }).join(' ');
       el('curvePath').setAttribute('d',d);
+      el('axisDescription').textContent=calibrated?'화자 보정 5도 음역(추정)':'상대 높낮이(미보정)';
       el('axisHalf').textContent=(axisMs/2000).toFixed(2).replace(/0+$/,'').replace(/\.$/,'')+'초';
       el('axisEnd').textContent=(axisMs/1000).toFixed(2).replace(/0+$/,'').replace(/\.$/,'')+'초';
-      el('graphMeta').textContent='발음 '+(endMs/1000).toFixed(2)+'초 · 세로 확대 '+graphZoom.toFixed(1)+'배';
+      el('graphMeta').textContent='발음 '+(endMs/1000).toFixed(2)+'초 · '+(calibrated?'보정 1~5 눈금':'상대 확대 '+graphZoom.toFixed(1)+'배');
     }
     function drawRawPitch(points) {
       if(points.length < 2) return;
@@ -213,7 +318,7 @@
       const base = median(pitch);
       if (!base || !Number.isFinite(base)) return;
       const semitones = pitch.map(f => 12*Math.log2(f/base));
-      drawCurve({values:semitones, times:points.map(p=>p.ms)});
+      drawCurve({values:semitones, times:points.map(p=>p.ms), hz:points.map(p=>p.f)});
     }
     // 슬라이더를 움직이면 마지막 곡선을 즉시 다시 그립니다.
     el('zoomRange').addEventListener('input', e=>{
@@ -225,29 +330,51 @@
       graphWindowMs=Number(e.target.value);
       if(latestGraph) drawCurve(latestGraph);
     });
+    function beginCalibration(which) {
+      if(!stream){updateCalibrationStatus('먼저 🎤 마이크 시작을 눌러주세요.');return;}
+      calibrationPending=which;
+      el('pitchTone').textContent='보정 중';
+      updateCalibrationStatus((which==='low'?'낮은':'높은')+' 기준음 녹음 대기: 편안한 목소리로 아—를 0.6~1초 발음하고 멈춰주세요.');
+    }
+    el('calLow').addEventListener('click',()=>beginCalibration('low'));
+    el('calHigh').addEventListener('click',()=>beginCalibration('high'));
+    el('calReset').addEventListener('click',()=>{calibration={low:null,high:null};calibrationPending='';updateCalibrationStatus('보정 초기화 완료. 1~5 눈금은 상대적인 방향만 나타냅니다.');if(latestGraph)drawCurve(latestGraph);});
     function finishUtterance() {
-      if(!speechStart) return;
+      if(!speechStart)return;
       const ms=Date.now()-speechStart;
       const collected=frames;
-      frames=[];speechStart=0;noisedFrames=0;
-      // 점수 판단은 유효 데이터가 충분히 모인 경우에만 진행합니다.
-      // 불충분한 경우에도 원인을 표시하며 이전 그래프를 지우지 않습니다.
+      frames=[];speechStart=0;noisedFrames=0;drawingUtterance=false;
       if(ms<280 || collected.length<7){
         tmVotes=[];
-        el('detail').textContent=`분석 보류: ${ms}ms, 음높이 ${collected.length}개. 한 음절을 0.6~1초 발음 후 잠시 멈춰보세요.`;
+        el('pitchTone').textContent='보류';
+        el('detail').textContent=`판정 보류: ${ms}ms, 음높이 ${collected.length}개. 0.6~1초 발음 후 잠깐 멈춰보세요.`;
+        if(collected.length<2) {el('curvePath').setAttribute('d','');latestGraph=null;el('graphMeta').textContent='음높이 데이터 부족 — 다시 발음하세요.';}
+        if(calibrationPending)updateCalibrationStatus('보정 실패: 너무 짧은 음입니다. 다시 같은 버튼을 누르고 발음하세요.');
+        calibrationPending='';
         drawRawPitch(collected);
         return;
       }
+      if(calibrationPending){
+        const hz=median(collected.map(p=>p.f));
+        const which=calibrationPending;calibrationPending='';
+        calibration[which]=hz;
+        if(calibration.low && calibration.high && calibration.high<=calibration.low*1.2){
+          updateCalibrationStatus('고음이 저음보다 충분히 높지 않습니다. 낮은 음·높은 음을 다시 녹음해 주세요.');
+        }else updateCalibrationStatus();
+        el('pitchTone').textContent='보정';
+        el('detail').textContent=(which==='low'?'낮은':'높은')+` 기준음 ${Math.round(hz)}Hz 저장. 게임 점수에는 반영하지 않았습니다.`;
+        tmVotes=[];drawRawPitch(collected);return;
+      }
       const result=computePitchResult(collected);
-      const scoring = cfg.active && cfg.stage===1;
+      const scoring=cfg.active && cfg.stage===1;
       const tmTone=(scoring && cfg.mode!=='pitchy')?mostLikelyTmTone():'';
       const pitchyTone=(scoring && cfg.mode==='tm')?'':result.tone;
       tmVotes=[];
-      el('pitchTone').textContent=result.tone?result.tone+'성':'불확실';
+      el('pitchTone').textContent=result.tone?result.tone+'성':'판정 보류';
       el('tmTone').textContent=tmTone?tmTone+'성':'—';
-      el('detail').textContent=result.reason + (scoring?'':' (독립 테스트: 점수에는 반영되지 않음)');
+      el('detail').textContent=result.reason+calibratedToneFeedback(result)+(scoring?'':' (독립 테스트: 점수에는 반영되지 않음)');
       drawCurve(result);
-      if(scoring) send({type:'PINYIN_RESULT',utteranceId:++utteranceId, pitchyTone,tmTone});
+      if(scoring && (pitchyTone || tmTone))send({type:'PINYIN_RESULT',utteranceId:++utteranceId,pitchyTone,tmTone});
     }
     function audioTick() {
       // 게임이 아직 시작되지 않은 경우에도 마이크와 그래프를 진단할 수 있습니다.
@@ -271,7 +398,11 @@
         // 2~7단계는 기존 문자 인식을 사용하고 있으므로 곡선 수집을 잠시 쉽니다.
         if(cfg.active && cfg.stage!==1) return;
         if(loud){noisedFrames++;lastLoud=now;}else{noisedFrames=0;}
-        if(!speechStart && noisedFrames>=2){speechStart=now-50;frames=[];tmVotes=[];}
+        if(!speechStart && noisedFrames>=2){
+          speechStart=now-50;frames=[];tmVotes=[];
+          el('pitchTone').textContent=calibrationPending?'보정 중':'분석 중…';
+          el('detail').textContent='발음 수집 중: 발음을 마친 뒤 잠시 멈춰주세요.';
+        }
         if(speechStart){
           if(loud && clearPitch){
             frames.push({f:freq,ms:now-speechStart});
@@ -373,6 +504,7 @@
       setStatus('마이크 종료');
       send({type:'PINYIN_MIC_STOP'});
     }
+    updateCalibrationStatus();
     el('start').addEventListener('click',startMic);
     el('stop').addEventListener('click',stopMic);
     window.addEventListener('beforeunload',()=>{if(stream)stream.getTracks().forEach(t=>t.stop());});
